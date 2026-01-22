@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+namespace atomic{
 
 class RateLimiterCounter{
 public:
@@ -59,6 +60,7 @@ private:
     int limit_;
 
 };
+}
 
 
 #endif

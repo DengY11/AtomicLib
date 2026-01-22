@@ -1,6 +1,7 @@
 #include "atomic_clamp.hpp"
 #include "atomic_min_max.hpp"
 #include "atomic_queue.hpp"
+#include "atomic_ring.hpp"
 #include "bound_counter.hpp"
 #include "bucket.hpp"
 #include "rate_limiter_counter.hpp"
@@ -12,6 +13,8 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+
+using namespace atomic;
 
 static void test_bound_counter() {
   BoundCounter<int> bc(5);
@@ -25,7 +28,7 @@ static void test_bound_counter() {
 }
 
 static void test_atomic_min_max() {
-  AtomicMinMax<double> mm(10.0);
+  MinMax<double> mm(10.0);
   assert(mm.load() == 10.0);
   assert(mm.update_min(5.0));
   assert(mm.load() == 5.0);
@@ -38,7 +41,7 @@ static void test_atomic_min_max() {
 }
 
 static void test_atomic_clamp() {
-  AtomicClamp<int> clamp(5);
+  Clamp<int> clamp(5);
   assert(!clamp.clamp_to(0, 10));
   assert(clamp.load() == 5);
   assert(clamp.clamp_to(6, 10));
@@ -58,7 +61,7 @@ static void test_rate_limiter_counter() {
 }
 
 static void test_atomic_queue() {
-  AtomicQueue<int> q;
+  Queue<int> q;
   q.enqueue(1);
   q.enqueue(2);
   int out = 0;
@@ -75,7 +78,7 @@ static void test_atomic_queue_concurrent() {
   constexpr int kPerProducer = 20000;
   constexpr int kTotal = kProducers * kPerProducer;
 
-  AtomicQueue<int> q;
+  Queue<int> q;
   std::atomic<int> produced{0};
   std::atomic<int> consumed{0};
   std::atomic<long long> sum{0};
@@ -87,6 +90,79 @@ static void test_atomic_queue_concurrent() {
       const int base = p * kPerProducer;
       for (int i = 0; i < kPerProducer; ++i) {
         q.enqueue(base + i);
+        produced.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::thread> consumers;
+  consumers.reserve(kConsumers);
+  for (int c = 0; c < kConsumers; ++c) {
+    consumers.emplace_back([&]() {
+      int value = 0;
+      while (consumed.load(std::memory_order_relaxed) < kTotal) {
+        if (q.try_dequeue(value)) {
+          sum.fetch_add(value, std::memory_order_relaxed);
+          consumed.fetch_add(1, std::memory_order_relaxed);
+        } else {
+          std::this_thread::yield();
+        }
+      }
+    });
+  }
+
+  for (auto& t : producers) {
+    t.join();
+  }
+  for (auto& t : consumers) {
+    t.join();
+  }
+
+  long long expected_sum = 0;
+  for (int p = 0; p < kProducers; ++p) {
+    const long long start = static_cast<long long>(p) * kPerProducer;
+    const long long end = start + kPerProducer - 1;
+    expected_sum += (start + end) * kPerProducer / 2;
+  }
+
+  assert(produced.load() == kTotal);
+  assert(consumed.load() == kTotal);
+  assert(sum.load() == expected_sum);
+}
+
+static void test_atomic_ring() {
+  MPMC::RingBuffer<int, 8> q;
+  int out = 0;
+  assert(!q.try_dequeue(out));
+  assert(q.try_enqueue(1));
+  assert(q.try_enqueue(2));
+  assert(q.try_dequeue(out));
+  assert(out == 1);
+  assert(q.try_dequeue(out));
+  assert(out == 2);
+  assert(!q.try_dequeue(out));
+}
+
+static void test_atomic_ring_concurrent() {
+  constexpr int kProducers = 4;
+  constexpr int kConsumers = 4;
+  constexpr int kPerProducer = 20000;
+  constexpr int kTotal = kProducers * kPerProducer;
+  MPMC::RingBuffer<int, 1 << 16> q;
+
+  std::atomic<int> produced{0};
+  std::atomic<int> consumed{0};
+  std::atomic<long long> sum{0};
+
+  std::vector<std::thread> producers;
+  producers.reserve(kProducers);
+  for (int p = 0; p < kProducers; ++p) {
+    producers.emplace_back([p, &q, &produced]() {
+      const int base = p * kPerProducer;
+      for (int i = 0; i < kPerProducer; ++i) {
+        while (!q.try_enqueue(base + i)) {
+          std::this_thread::yield();
+        }
         produced.fetch_add(1, std::memory_order_relaxed);
       }
     });
@@ -170,6 +246,8 @@ int main() {
   test_rate_limiter_counter();
   test_atomic_queue();
   test_atomic_queue_concurrent();
+  test_atomic_ring();
+  test_atomic_ring_concurrent();
   test_bucket();
   test_bucket_concurrent();
 

@@ -7,15 +7,16 @@
 #include <optional>
 #include <utility>
 #include <vector>
+namespace atomic{
 
 template <typename T>
-class AtomicQueue {
+class Queue {
 public:
-  AtomicQueue()
+  Queue()
       : head_(new Node()),
         tail_(head_.load(std::memory_order_relaxed)) {}
 
-  ~AtomicQueue() {
+  ~Queue() {
     Node* node = head_.load(std::memory_order_relaxed);
     while (node) {
       Node* next = node->next.load(std::memory_order_relaxed);
@@ -25,10 +26,10 @@ public:
     drain_free_list();
   }
 
-  AtomicQueue(const AtomicQueue&) = delete;
-  AtomicQueue& operator=(const AtomicQueue&) = delete;
-  AtomicQueue(AtomicQueue&&) = delete;
-  AtomicQueue& operator=(AtomicQueue&&) = delete;
+  Queue(const Queue&) = delete;
+  Queue& operator=(const Queue&) = delete;
+  Queue(Queue&&) = delete;
+  Queue& operator=(Queue&&) = delete;
 
   void enqueue(const T& value) {
     Node* node = make_node(value);
@@ -96,7 +97,7 @@ private:
 
   class EpochManager {
   public:
-    explicit EpochManager(AtomicQueue* owner)
+    explicit EpochManager(Queue* owner)
         : owner_(owner) {}
     ~EpochManager() {
       ThreadRecord* node = records_.load(std::memory_order_relaxed);
@@ -217,7 +218,7 @@ private:
 
     alignas(kCacheLine) std::atomic<uint64_t> global_epoch_{0};
     std::atomic<ThreadRecord*> records_{nullptr};
-    AtomicQueue* owner_{nullptr};
+    Queue* owner_{nullptr};
   };
 
   void enqueue_impl(Node* node) {
@@ -345,5 +346,6 @@ private:
   alignas(kCacheLine) std::atomic<Node*> tail_;
   alignas(kCacheLine) std::atomic<Node*> free_head_{nullptr};
 };
+}
 
 #endif

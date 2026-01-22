@@ -4,6 +4,7 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+namespace atomic{
 
 class Bucket{
 public:
@@ -87,6 +88,7 @@ private:
 	std::vector<std::thread>add_threads;
 };
 
+}
 
 
 #endif

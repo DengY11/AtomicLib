@@ -2,6 +2,7 @@
 #define BOUND_COUNTER_HPP
 #include <atomic>
 #include <type_traits>
+namespace atomic{
 
 template<typename T, typename std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
 class BoundCounter{
@@ -68,5 +69,6 @@ private:
     T cap_;
     std::atomic<T>current_;
 };
+}
 
 #endif

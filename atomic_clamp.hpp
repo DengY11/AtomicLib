@@ -5,15 +5,17 @@
 #include <cassert>
 #include <type_traits>
 
+namespace atomic{
+
 template <typename T, typename std::enable_if_t<std::is_arithmetic_v<T>,int> = 0>
-class AtomicClamp{
+class Clamp{
 public:
-    explicit AtomicClamp(T init):atom_(init){}
-    ~AtomicClamp()=default;
-    AtomicClamp(const AtomicClamp&)=delete;
-    AtomicClamp& operator=(const AtomicClamp&)=delete;
-    AtomicClamp(AtomicClamp&&)=delete;
-    AtomicClamp& operator=(AtomicClamp&&)=delete;
+    explicit Clamp(T init):atom_(init){}
+    ~Clamp()=default;
+    Clamp(const Clamp&)=delete;
+    Clamp& operator=(const Clamp&)=delete;
+    Clamp(Clamp&&)=delete;
+    Clamp& operator=(Clamp&&)=delete;
 
     T load(std::memory_order order = std::memory_order_relaxed) const{
         return atom_.load(order);
@@ -42,5 +44,6 @@ public:
 private:
     std::atomic<T> atom_;
 };
+}
 
 #endif

@@ -4,18 +4,19 @@
 #include <atomic>
 #include <cmath>
 #include <type_traits>
+namespace atomic{
 
 template <typename T,
     typename std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
-class AtomicMinMax{
+class MinMax{
 public:
-    explicit AtomicMinMax(T val):cur_(val){}
-    ~AtomicMinMax()=default;
+    explicit MinMax(T val):cur_(val){}
+    ~MinMax()=default;
 
-    AtomicMinMax(const AtomicMinMax&)=delete;
-    AtomicMinMax& operator=(const AtomicMinMax&)=delete;
-    AtomicMinMax(AtomicMinMax&&)=delete;
-    AtomicMinMax& operator=(AtomicMinMax&&)=delete;
+    MinMax(const MinMax&)=delete;
+    MinMax& operator=(const MinMax&)=delete;
+    MinMax(MinMax&&)=delete;
+    MinMax& operator=(MinMax&&)=delete;
 
     T load(std::memory_order order = std::memory_order_relaxed) const{
         return cur_.load(order);
@@ -81,5 +82,6 @@ private:
 
 
 };
+}
 
 #endif
