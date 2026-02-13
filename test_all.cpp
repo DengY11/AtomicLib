@@ -4,6 +4,7 @@
 #include "atomic_ring.hpp"
 #include "bound_counter.hpp"
 #include "bucket.hpp"
+#include "lfu.hpp"
 #include "rate_limiter_counter.hpp"
 
 #include <cassert>
@@ -11,6 +12,8 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -239,6 +242,76 @@ static void test_bucket_concurrent() {
   assert(consumed.load() == kTotalTokens);
 }
 
+static void test_lfu_eviction() {
+  LFU<int, int> lfu(2);
+  lfu.put(1, 10);
+  lfu.put(2, 20);
+
+  auto v1 = lfu.get(1);
+  assert(v1 && *v1 == 10);
+
+  lfu.put(3, 30);
+
+  assert(!lfu.get(2));
+  auto v1_after = lfu.get(1);
+  assert(v1_after && *v1_after == 10);
+  auto v3 = lfu.get(3);
+  assert(v3 && *v3 == 30);
+}
+
+static void test_lfu_lru_within_freq() {
+  LFU<int, int> lfu(2);
+  lfu.put(1, 1);
+  lfu.put(2, 2);
+
+  lfu.put(3, 3);
+
+  assert(!lfu.get(1));
+  auto v2 = lfu.get(2);
+  assert(v2 && *v2 == 2);
+  auto v3 = lfu.get(3);
+  assert(v3 && *v3 == 3);
+}
+
+static void test_lfu_update_existing() {
+  LFU<int, int> lfu(2);
+  lfu.put(1, 1);
+  lfu.put(2, 2);
+
+  lfu.put(1, 10);
+  lfu.put(3, 3);
+
+  assert(!lfu.get(2));
+  auto v1 = lfu.get(1);
+  assert(v1 && *v1 == 10);
+}
+
+static void test_lfu_accessors() {
+  LFU<int, std::string> lfu(1);
+  lfu.put(1, std::string("a"));
+
+  auto v1 = lfu.get_copy(1);
+  assert(v1 && *v1 == "a");
+
+  {
+    auto locked = lfu.get_locked(1);
+    assert(locked);
+    locked.value() = "b";
+  }
+
+  auto v2 = lfu.get_copy(1);
+  assert(v2 && *v2 == "b");
+}
+
+static void test_lfu_put_kv() {
+  LFU<int, int> lfu(1);
+  auto kv = std::make_unique<LFU<int, int>::LFU_KV>(1, 11);
+  lfu.put(std::move(kv));
+
+  auto v1 = lfu.get(1);
+  assert(v1 && *v1 == 11);
+}
+
 int main() {
   test_bound_counter();
   test_atomic_min_max();
@@ -250,6 +323,11 @@ int main() {
   test_atomic_ring_concurrent();
   test_bucket();
   test_bucket_concurrent();
+  test_lfu_eviction();
+  test_lfu_lru_within_freq();
+  test_lfu_update_existing();
+  test_lfu_accessors();
+  test_lfu_put_kv();
 
   std::cout << "PASS\n";
 

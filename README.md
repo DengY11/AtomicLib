@@ -1,1 +1,1 @@
-mutex-less lib
+thread safe lib
